@@ -3,6 +3,7 @@ local fetch = require 'typst-preview.fetch'
 local utils = require 'typst-preview.utils'
 local config = require 'typst-preview.config'
 local servers = require 'typst-preview.servers'
+local input_storage = require 'typst-preview.input'
 
 local M = {}
 
@@ -62,6 +63,7 @@ function M.create_commands()
     if ser == nil or ser[mode] == nil then
       servers.init(path, mode, function(s)
         events.listen(s)
+        input_storage.set_path_mode(path, mode)
       end)
     else
       local s = ser[mode]
@@ -132,6 +134,107 @@ function M.create_commands()
   vim.api.nvim_create_user_command('TypstPreviewSyncCursor', function()
     M.sync_with_cursor()
   end, {})
+
+  -- TypstPreviewInput command
+  vim.api.nvim_create_user_command('TypstPreviewInput', function(opts)
+    local current_inputs = input_storage.get_inputs()
+
+    -- Show current inputs if no arguments provided
+    if #opts.fargs == 0 then
+      if vim.tbl_isempty(current_inputs) then
+        utils.print 'No input fields set'
+      else
+        local input_strs = {}
+        for key, value in pairs(current_inputs) do
+          table.insert(input_strs, key .. '=' .. value)
+        end
+        utils.print('Current inputs: ' .. table.concat(input_strs, ' '))
+      end
+      return
+    end
+
+    -- Parse new inputs from command arguments
+    local input_str = table.concat(opts.fargs, ' ')
+    local new_inputs = input_storage.parse_input_string(input_str)
+
+    if vim.tbl_isempty(new_inputs) then
+      utils.notify(
+        'Invalid input format. Expected: key=value',
+        vim.log.levels.ERROR
+      )
+      return
+    end
+
+    -- Check if inputs actually changed
+    local inputs_changed = false
+    if vim.tbl_isempty(current_inputs) then
+      inputs_changed = not vim.tbl_isempty(new_inputs)
+    else
+      -- Check if all keys and values match
+      for key, value in pairs(new_inputs) do
+        if current_inputs[key] ~= value then
+          inputs_changed = true
+          break
+        end
+      end
+      -- Check if any keys were removed
+      if not inputs_changed then
+        for key, _ in pairs(current_inputs) do
+          if new_inputs[key] == nil then
+            inputs_changed = true
+            break
+          end
+        end
+      end
+    end
+
+    -- Set new inputs
+    input_storage.set_inputs(new_inputs)
+
+    -- Show what was set
+    local input_strs = {}
+    for key, value in pairs(new_inputs) do
+      table.insert(input_strs, key .. '=' .. value)
+    end
+    utils.print('Inputs set: ' .. table.concat(input_strs, ' '))
+
+    -- Restart all running servers if inputs changed
+    if inputs_changed then
+      local all_servers = servers.get_all()
+      local paths_to_restart = {}
+
+      -- Collect unique paths that need restarting
+      for _, server in ipairs(all_servers) do
+        paths_to_restart[server.path] = true
+      end
+
+      -- Stop all servers first
+      for path, _ in pairs(paths_to_restart) do
+        if servers.remove(path) then
+          utils.print('Stopping preview for: ' .. path)
+        end
+      end
+
+      -- Restart servers with new inputs
+      for path, _ in pairs(paths_to_restart) do
+        local mode = input_storage.get_path_mode(path) or 'document'
+        -- Schedule restart after a short delay to ensure clean shutdown
+        vim.defer_fn(function()
+          servers.init(path, mode, function(s)
+            events.listen(s)
+            input_storage.set_path_mode(path, mode)
+          end)
+          utils.print('Restarted preview for: ' .. path .. ' (mode: ' .. mode .. ')')
+        end, 100)
+      end
+    end
+  end, {
+    nargs = '*',
+    complete = function()
+      -- Suggest common input patterns (could be enhanced with project-specific inputs)
+      return {}
+    end,
+  })
 end
 
 return M
