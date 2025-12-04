@@ -78,6 +78,31 @@ plugin, i.e., `v1.1.*` instead of `v1.*`.
   - Scroll preview to the current cursor position. This can be used in combination with
     `:TypstPreviewNoFollowCursor` so that the preview only scroll to the current cursor position
     when you want it to.
+- `:TypstPreviewInput`:
+  - Manage input fields for the Typst document:
+    - `:TypstPreviewInput` (no arguments) - Show current input fields
+    - `:TypstPreviewInput key1=value1 key2=value2` - Set input fields (replaces all existing values)
+  - When inputs are changed, all running preview servers will automatically restart to apply the new values.
+  - Input values are accessible in your Typst document via `sys.inputs`.
+
+#### Example Usage:
+
+```typst
+// In your Typst document
+= #sys.inputs.title
+
+Version: #sys.inputs.version
+
+// Dynamic content based on inputs
+#sys.inputs.draft == "true" ? [DRAFT] : []
+```
+
+```vim
+// In Neovim
+:TypstPreviewInput title="My Document" version=2.0 draft=true
+:TypstPreviewInput  // Shows: Current inputs: title=My Document version=2.0 draft=true
+:TypstPreviewInput version=2.1  // Updates version, removes title and draft
+```
 
 ## ⚙️ Configuration
 

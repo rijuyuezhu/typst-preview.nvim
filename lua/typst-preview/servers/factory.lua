@@ -1,6 +1,7 @@
 local fetch = require 'typst-preview.fetch'
 local utils = require 'typst-preview.utils'
 local config = require 'typst-preview.config'
+local input_storage = require 'typst-preview.input'
 
 -- Responsible for starting, stopping and communicating with the server
 local M = {}
@@ -52,6 +53,13 @@ local function spawn(path, host, port, mode, callback)
     else
       error('config.opts.extra_args must be a table or function')
     end
+  end
+
+  -- Add input fields from global storage
+  local input_fields = input_storage.get_inputs()
+  for key, value in pairs(input_fields) do
+    table.insert(args, '--input')
+    table.insert(args, key .. '=' .. value)
   end
 
   table.insert(args, config.opts.get_main_file(path))
