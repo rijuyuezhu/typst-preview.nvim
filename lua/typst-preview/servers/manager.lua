@@ -25,14 +25,20 @@ end
 ---Init a server
 ---@param path string
 ---@param mode mode
+---@param opts { open_frontend?: boolean, port?: number }?
 ---@param callback fun(server: Server)
-function M.init(path, mode, callback)
+function M.init(path, mode, opts, callback)
+  if callback == nil then
+    callback = opts
+    opts = nil
+  end
+
   path = abs_path(path)
   assert(
     servers[path] == nil or servers[path][mode] == nil,
     'Server with path ' .. path .. ' and mode ' .. mode .. ' already exist.'
   )
-  factory.new(path, mode, function(server)
+  factory.new(path, mode, opts, function(server)
     servers[path] = servers[path] or {}
     servers[path][mode] = server
     last_modes[path] = mode

@@ -9,9 +9,10 @@ local M = {}
 ---Spawn the server and connect to it using the websocat process
 ---@param path string
 ---@param mode mode
+---@param open_frontend boolean
 ---@param callback fun(close: fun(), write: fun(data: string), read: fun(on_read: fun(data: string)), link: string)
 ---Called after server spawn completes
-local function spawn(path, host, port, mode, callback)
+local function spawn(path, host, port, mode, open_frontend, callback)
   local server_stdout = assert(vim.uv.new_pipe())
   local server_stderr = assert(vim.uv.new_pipe())
   local tinymist_bin = config.opts.dependencies_bin['tinymist']
@@ -160,7 +161,7 @@ local function spawn(path, host, port, mode, callback)
       server_stderr:close()
       -- try again at port + 1
       vim.defer_fn(function()
-        spawn(path, host, port + 1, mode, callback)
+        spawn(path, host, port + 1, mode, open_frontend, callback)
       end, 0)
     end
     local control_host = find_host(
@@ -176,7 +177,9 @@ local function spawn(path, host, port, mode, callback)
     if static_host then
       utils.debug 'Setting link'
       vim.defer_fn(function()
-        utils.visit(static_host)
+        if open_frontend then
+          utils.visit(static_host)
+        end
         if callback_param ~= nil then
           assert(
             type(callback_param.close) == 'function'
@@ -205,11 +208,20 @@ end
 ---create a new Server
 ---@param path string
 ---@param mode mode
+---@param opts { open_frontend?: boolean, port?: number }?
 ---@param callback fun(server: Server)
-function M.new(path, mode, callback)
+function M.new(path, mode, opts, callback)
+  if callback == nil then
+    callback = opts
+    opts = nil
+  end
+
+  opts = opts or {}
+  local open_frontend = opts.open_frontend ~= false
+  local port = opts.port or config.opts.port
   local read_buffer = ''
 
-  spawn(path, config.opts.host, config.opts.port, mode, function(close, write, read, link)
+  spawn(path, config.opts.host, port, mode, open_frontend, function(close, write, read, link)
     ---@type Server
     local server = {
       path = path,

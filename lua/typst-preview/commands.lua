@@ -7,6 +7,11 @@ local input_storage = require 'typst-preview.input'
 
 local M = {}
 
+local function port_from_link(link)
+  local port = link and link:match(':(%d+)$')
+  return port and tonumber(port) or nil
+end
+
 ---Scroll all preview to cursor position.
 function M.sync_with_cursor()
   for _, ser in pairs(servers.get_all()) do
@@ -66,9 +71,7 @@ function M.create_commands()
         input_storage.set_path_mode(path, mode)
       end)
     else
-      local s = ser[mode]
-      print 'Opening another frontend'
-      utils.visit(s.link)
+      utils.print 'Preview already running'
     end
   end
 
@@ -205,7 +208,10 @@ function M.create_commands()
 
       -- Collect unique paths that need restarting
       for _, server in ipairs(all_servers) do
-        paths_to_restart[server.path] = true
+        paths_to_restart[server.path] = {
+          mode = server.mode,
+          port = port_from_link(server.link),
+        }
       end
 
       -- Stop all servers first
@@ -216,11 +222,14 @@ function M.create_commands()
       end
 
       -- Restart servers with new inputs
-      for path, _ in pairs(paths_to_restart) do
-        local mode = input_storage.get_path_mode(path) or 'document'
+      for path, server_state in pairs(paths_to_restart) do
+        local mode = server_state.mode or input_storage.get_path_mode(path) or 'document'
         -- Schedule restart after a short delay to ensure clean shutdown
         vim.defer_fn(function()
-          servers.init(path, mode, function(s)
+          servers.init(path, mode, {
+            open_frontend = false,
+            port = server_state.port,
+          }, function(s)
             events.listen(s)
             input_storage.set_path_mode(path, mode)
           end)
